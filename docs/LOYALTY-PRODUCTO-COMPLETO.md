@@ -375,7 +375,14 @@ que funciona es la trampa que ya evitamos una vez.
 ## 10 · Estado real del desarrollo
 
 > Todo esto vive en el PR **#90**, rama `claude/loyalty-a1-migraciones` →
-> `desarrollo`. Todavía **no está mergeado ni desplegado**.
+> `main`. Todavía **no está mergeado ni desplegado**.
+>
+> **Nota sobre la rama destino (septiembre 2026):** el PR apuntaba
+> originalmente a `desarrollo`, pero esa rama está abandonada en la práctica
+> — tiene cero commits que `main` no tenga y está 36 atrás. Todo el equipo
+> mergea directo a `main` (PRs 91 a 97). Se reapuntó a `main`, que además es
+> seguro: el módulo entero está detrás de `LOYALTY_ENABLED=false`, así que en
+> producción es código muerto hasta que alguien encienda el flag.
 
 ### Hecho y verificado
 
@@ -385,13 +392,31 @@ que funciona es la trampa que ya evitamos una vez.
 | **A2** | Flag `LOYALTY_ENABLED`, branch en el router del tap, landing `/l/<codigo>`, `lib/db/loyalty.ts` | ✅ Escrito |
 | **A3** | Motor de puntos: ledger, antifraude, Google Wallet (Issuer API), Apple Wallet (`.pkpass`) | ✅ Escrito |
 
-**Verificación:** `tsc --noEmit` limpio, **49/49 tests pasan** (13 nuevos). La
-firma PKCS#7 de los pases de Apple se comprobó con **OpenSSL** contra una cadena
-de certificados de prueba — no solo "no tira excepción", se validó de verdad.
+**Verificación — el CI está en verde, entero** (septiembre 2026): instalación
+de dependencias, `tsc --noEmit`, **49/49 tests**, `next build` y auditoría de
+vulnerabilidades. Los cinco pasos.
 
-`next build` no se pudo probar en el entorno de desarrollo por falta de
-`DATABASE_URL` (sin acceso a Neon desde ahí). **Alguien con acceso tiene que
-correrlo antes de mergear.**
+La firma PKCS#7 de los pases de Apple se comprobó con **OpenSSL** contra una
+cadena de certificados de prueba — no solo "no tira excepción", se validó de
+verdad contra una implementación independiente.
+
+> **Lo que pasó antes, para que no se repita.** Este PR estuvo diez días en
+> rojo sin que nadie lo mirara, por dos motivos acumulados:
+>
+> 1. El `package-lock.json` quedó inconsistente con `package.json` al armar
+>    el PR, y `npm ci` fallaba en el **primer paso** del CI, antes de correr
+>    un solo test. Trampa a tener presente: `npm install` con Node 24 **borra**
+>    `node_modules/vite-node/node_modules/{@types/node,undici-types}`, que el
+>    npm de Node 22 (el del CI) exige. Si alguien toca el lockfile con una
+>    versión de Node distinta a la del CI, hay que verificar que esas entradas
+>    sigan estando.
+> 2. El PR estaba marcado como **borrador**, que en GitHub significa
+>    literalmente "no lo revises todavía".
+>
+> Y un tercero que no era de este PR: el paso de auditoría venía fallando en
+> **todas** las corridas de `main` desde el 2 de septiembre por dos CVE high en
+> `browserslist`. Se arregló acá (bump de parche) porque si no, este PR nunca
+> podía ponerse verde.
 
 ### Falta construir
 
