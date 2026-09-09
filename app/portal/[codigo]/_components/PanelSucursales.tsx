@@ -1,9 +1,7 @@
 import type { Cliente } from "@/lib/types";
 import { IconBuilding } from "@/components/portal/PortalShell";
 import { CalificacionGoogleCard } from "@/components/portal/PortalResumen";
-import ScrollActiveIntoView from "@/components/ScrollActiveIntoView";
-import ScrollFadeRow from "@/components/ScrollFadeRow";
-import { hrefSucursal, hrefTodos } from "../_lib";
+import SelectorSucursales from "./SelectorSucursales";
 
 // Panel "Sucursales": selector de local dentro de la cuenta — el detalle
 // de cada uno (dispositivos, reseñas, evolución mensual) vive en las
@@ -56,62 +54,15 @@ export default function PanelSucursales({
   return (
     <>
       {/* Selector compacto: todos los locales, el elegido resaltado —
-          cambiarlo recarga la página con ese local como "activo" en
-          todo el portal, así que el detalle de abajo es siempre suyo.
-          ScrollFadeRow agrega el degradé en el borde cuando hay más
-          locales de los que entran en el ancho disponible — sin esto,
-          el último visible queda cortado a mitad de nombre, sin ninguna
-          pista de que hay más para scrollear (el scrollbar nativo puede
-          estar oculto según el navegador/SO). */}
+          elegir uno te lleva directo a su Resumen (con este mismo selector
+          arriba, para poder seguir cambiando de local sin volver acá). */}
       <div className="mb-4">
-        <ScrollFadeRow>
-          {(() => {
-            const chipTodos = (
-              <a
-                href={hrefTodos(codigoAcceso)}
-                className={`shrink-0 rounded-full px-3.5 py-2 text-sm font-medium transition ${
-                  modoTodos
-                    ? "bg-brand text-white"
-                    : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50"
-                }`}
-              >
-                Todos
-              </a>
-            );
-            return modoTodos ? (
-              <ScrollActiveIntoView key="todos">{chipTodos}</ScrollActiveIntoView>
-            ) : (
-              <div key="todos" className="contents">
-                {chipTodos}
-              </div>
-            );
-          })()}
-          {ubicaciones.map((s) => {
-            const activa = !modoTodos && s.id === activoId;
-            const chip = (
-              <a
-                href={hrefSucursal(codigoAcceso, s)}
-                className={`shrink-0 rounded-full px-3.5 py-2 text-sm font-medium transition ${
-                  activa
-                    ? "bg-brand text-white"
-                    : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50"
-                }`}
-              >
-                {s.nombre}
-              </a>
-            );
-            // En mobile la tira es más ancha que la pantalla — sin esto,
-            // si el local elegido está lejos del principio, entrás y no
-            // lo ves resaltado sin scrollear la tira vos mismo.
-            return activa ? (
-              <ScrollActiveIntoView key={s.id}>{chip}</ScrollActiveIntoView>
-            ) : (
-              <div key={s.id} className="contents">
-                {chip}
-              </div>
-            );
-          })}
-        </ScrollFadeRow>
+        <SelectorSucursales
+          ubicaciones={ubicaciones}
+          activoId={activoId}
+          modoTodos={modoTodos}
+          codigoAcceso={codigoAcceso}
+        />
       </div>
 
       <div className="space-y-4">

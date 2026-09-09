@@ -15,6 +15,7 @@ import TapsPorSoporteChart from "@/components/TapsPorSoporteChart";
 import GestionResenas from "@/components/GestionResenas";
 import { resenasApiHabilitada } from "@/lib/google-reviews";
 import { heroDeCalificacion, hrefSucursal, hrefTodos } from "../_lib";
+import SelectorSucursales from "./SelectorSucursales";
 
 // Panel "Resumen": de un vistazo, para abrir el portal y entender el
 // estado del negocio sin tener que entrar a ninguna otra sección todavía.
@@ -81,25 +82,38 @@ export default function PanelResumen({
           colapsado (ver PrioridadesPanel) para no ocupar media pantalla. */}
       <PrioridadesPanel prioridades={prioridades} />
 
-      {/* Con más de un local, decir explícitamente qué se está mirando —
-          el combinado de todos, o el detalle de uno puntual — es lo que
-          evita el problema de siempre: no saber si el número de abajo es
-          "todo" o "solo este local". */}
+      {/* Con más de un local: selector arriba de todo para poder saltar de
+          uno a otro sin ir a la pestaña Sucursales (elegir un local ahí
+          te trae de vuelta acá, a SU resumen — ver hrefSucursal en
+          _lib.tsx). Decir explícitamente qué se está mirando — el
+          combinado de todos, o el detalle de uno puntual — evita el
+          problema de siempre: no saber si el número de abajo es "todo" o
+          "solo este local". */}
       {hayVarios && (
-        <p className="mb-3 text-sm text-slate-500">
-          Viendo:{" "}
-          <span className="font-semibold text-slate-800">
-            {modoTodos ? `todos tus locales (${ubicaciones.length})` : activoNombre}
-          </span>
-          {!modoTodos && (
-            <>
-              {" — "}
-              <a href={hrefTodos(codigoAcceso)} className="font-medium text-brand-fg hover:underline">
-                ver todos combinados
-              </a>
-            </>
-          )}
-        </p>
+        <div className="mb-4">
+          <div className="mb-2">
+            <SelectorSucursales
+              ubicaciones={ubicaciones}
+              activoId={activoId}
+              modoTodos={modoTodos}
+              codigoAcceso={codigoAcceso}
+            />
+          </div>
+          <p className="text-sm text-slate-500">
+            Viendo:{" "}
+            <span className="font-semibold text-slate-800">
+              {modoTodos ? `todos tus locales (${ubicaciones.length})` : activoNombre}
+            </span>
+            {!modoTodos && (
+              <>
+                {" — "}
+                <a href={hrefTodos(codigoAcceso)} className="font-medium text-brand-fg hover:underline">
+                  ver todos combinados
+                </a>
+              </>
+            )}
+          </p>
+        </div>
       )}
 
       {/* De un vistazo: para abrir el portal y entender el estado del
