@@ -20,13 +20,21 @@ export function fechaCorta(v: string): string {
   return new Date(v).toLocaleDateString("es-AR");
 }
 
-// Link para elegir un local: siempre manda a la sección "Mis Sucursales"
-// (hash incluido) — esta es una page.tsx server component, así que cada
-// click es una navegación de página completa; sin el hash, PortalShell
-// arrancaría de nuevo en Resumen en vez de quedarse en el detalle.
-export function hrefSucursal(codigoAcceso: string, cuentaId: string, s: { id: string }): string {
-  const base = s.id === cuentaId ? `/portal/${codigoAcceso}` : `/portal/${codigoAcceso}?sucursal=${s.id}`;
-  return `${base}#sucursales`;
+// Link para elegir un local puntual: siempre manda a la sección "Mis
+// Sucursales" (hash incluido) — esta es una page.tsx server component, así
+// que cada click es una navegación de página completa; sin el hash,
+// PortalShell arrancaría de nuevo en Resumen en vez de quedarse en el
+// detalle. Todo local (incluida la cuenta raíz) usa ?sucursal=<id> — sin
+// eso, no hay forma de distinguir "quiero ver la cuenta raíz sola" de
+// "quiero el combinado de todos" (ver hrefTodos).
+export function hrefSucursal(codigoAcceso: string, s: { id: string }): string {
+  return `/portal/${codigoAcceso}?sucursal=${s.id}#sucursales`;
+}
+
+// Vuelve a la vista combinada (todos los locales sumados) — es el estado
+// por defecto del portal cuando el cliente tiene más de un local.
+export function hrefTodos(codigoAcceso: string): string {
+  return `/portal/${codigoAcceso}#sucursales`;
 }
 
 // Hero de calificación de un local: preferimos el snapshot mensual (misma

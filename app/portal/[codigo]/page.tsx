@@ -11,6 +11,7 @@ import {
   getAudits,
   getResenas,
   getBenchmarkMensual,
+  getCompetidores,
 } from "@/lib/db";
 import { portalRequiereLoginGoogle, tieneAccesoPortal } from "@/lib/portal-auth";
 import PortalGateGoogle from "./_components/PortalGateGoogle";
@@ -75,15 +76,20 @@ export default async function PortalPage({
   // de acceso, plan, facturación) — y también, ella misma, el local
   // original (así nació antes de tener sucursales: su propio Google Place
   // ID, historial, reseñas). Las sucursales son locales nuevos que cuelgan
-  // de esa cuenta. `ubicaciones` junta ambas cosas para el selector; sin
-  // `?sucursal=` en la URL, `activo` es siempre la cuenta (comportamiento
-  // de siempre, sin sorpresas) — recién cambia si el cliente elige
-  // explícitamente otro local.
+  // de esa cuenta. `ubicaciones` junta ambas cosas para el selector.
+  //
+  // Con más de un local, el estado por defecto (sin `?sucursal=`, o con
+  // `?sucursal=todos`) es el COMBINADO de todos — antes el default caía en
+  // la cuenta raíz sola, y no había forma de ver el total sin ir clic a
+  // clic por cada local. Elegir un local puntual (`?sucursal=<id>`,
+  // cualquiera, incluida la cuenta raíz) hace drill-down a su detalle,
+  // exactamente como antes.
   const sucursales = await getSucursales(c.id);
   const ubicaciones = [c, ...sucursales];
-  const activo = sucursalParam
-    ? (ubicaciones.find((u) => u.id === sucursalParam) ?? c)
-    : c;
+  const modoTodos = sucursales.length > 0 && (!sucursalParam || sucursalParam === "todos");
+  const activo = modoTodos
+    ? c
+    : (ubicaciones.find((u) => u.id === sucursalParam) ?? c);
 
   const gbpConectado = Boolean(activo.googleConectadoEn);
   const diasConectado = activo.googleConectadoEn
@@ -181,7 +187,6 @@ export default async function PortalPage({
   const qrPorDia = diasConTaps.map((d) => tapsPorDiaSoporte.find((x) => x.fecha === d)?.qr ?? 0);
 
   const linksConTaps = [...links].sort((a, b) => b.taps - a.taps);
-  const totalTapsHistorico = links.reduce((acc, l) => acc + l.taps, 0);
   const totalTapsNfc = links.filter((l) => l.tipo === "nfc").reduce((acc, l) => acc + l.taps, 0);
   const totalTapsQr = links.filter((l) => l.tipo === "qr" || l.tipo === "ambos").reduce((acc, l) => acc + l.taps, 0);
   const tieneSoporteQr = links.some((l) => l.tipo === "qr" || l.tipo === "ambos");
@@ -190,7 +195,35 @@ export default async function PortalPage({
   // contra la fecha de hoy en el mismo formato que ya usa fechaISO() en
   // lib/db.ts, para que "hoy" siempre coincida con lo que guardó el sync.
   const hoyISO = new Date().toISOString().slice(0, 10);
-  const resenasHoy = resenas.filter((r) => r.fecha === hoyISO).length;
+
+  // `totalTapsHistorico` (de acá para abajo) queda SIEMPRE scopeado a
+  // `activo` — lo usan Dispositivos y Escaneos, que siguen siendo detalle
+  // de un solo local aunque el Resumen esté en modo combinado (si no, el
+  // número de arriba de esas pestañas no coincidiría con la tabla de abajo,
+  // que sigue mostrando solo los dispositivos de `activo`).
+  const totalTapsHistorico = links.reduce((acc, l) => acc + l.taps, 0);
+
+  // Totales SOLO para el Resumen: en modo combinado, se suman taps/reseñas
+  // de TODOS los locales — reseñas nuevas salen de `historico` que cada
+  // Cliente ya trae cargado (sin queries extra); taps y "reseñas hoy" sí
+  // necesitan traer los links/reseñas de cada sucursal aparte.
+  let totalTapsCombinado = totalTapsHistorico;
+  let resenasHoy = resenas.filter((r) => r.fecha === hoyISO).length;
+  let resenasNuevasMesTotal = m?.resenasNuevas ?? 0;
+
+  if (modoTodos && sucursales.length > 0) {
+    const deLasSucursales = await Promise.all(
+      sucursales.map(async (s) => {
+        const [linksS, resenasS] = await Promise.all([getLinks(s.id), getResenas(s.id)]);
+        return { s, linksS, resenasS };
+      }),
+    );
+    for (const { s, linksS, resenasS } of deLasSucursales) {
+      totalTapsCombinado += linksS.reduce((acc, l) => acc + l.taps, 0);
+      resenasHoy += resenasS.filter((r) => r.fecha === hoyISO).length;
+      resenasNuevasMesTotal += metricaActual(s)?.resenasNuevas ?? 0;
+    }
+  }
 
   // Promedio de reseñas nuevas por mes, sobre todo el histórico cargado —
   // para "Evolución mes a mes", así el número no depende de mirar mes por
@@ -205,6 +238,28 @@ export default async function PortalPage({
     deltaRating: deltaRatingHero,
     deltaResenas: deltaResenasHero,
   } = heroDeCalificacion(activo);
+
+  // Reseñas totales combinadas: suma del total "en vivo" de cada local
+  // (mismo dato que ya usa cada card de "Rendimiento"), sin queries extra.
+  const resenasTotalesTotal = modoTodos
+    ? ubicaciones.reduce((acc, u) => acc + heroDeCalificacion(u).totalResenas, 0)
+    : resenasHero;
+
+  // Posición frente a la competencia cargada para ESTE local — no tiene
+  // sentido combinarla entre locales (la competencia de un barrio no es la
+  // de otro), así que solo se calcula cuando se está viendo un local
+  // puntual, con Google Places como único requisito (no depende de la
+  // aprobación de Business Profile que todavía está pendiente).
+  const posicionCompetencia = await (async () => {
+    if (modoTodos || ratingHero === null) return null;
+    const competidores = await getCompetidores(activo.id);
+    const ratingsCompetencia = competidores
+      .map((comp) => comp.rating)
+      .filter((r): r is number => r !== null);
+    if (ratingsCompetencia.length === 0) return null;
+    const mejores = ratingsCompetencia.filter((r) => r > ratingHero).length;
+    return { puesto: mejores + 1, total: ratingsCompetencia.length + 1 };
+  })();
 
   // Lo que corre arriba de todo: acciones pendientes reales del dueño,
   // ordenadas por urgencia. Todo lo demás del portal es "mirar" — esto es
@@ -244,21 +299,23 @@ export default async function PortalPage({
     <PanelResumen
       mensajeGoogle={mensajeGoogle}
       prioridades={prioridades}
-      totalTapsHistorico={totalTapsHistorico}
+      modoTodos={modoTodos}
+      totalTapsHistorico={totalTapsCombinado}
       resenasHoy={resenasHoy}
-      resenasNuevasMes={m?.resenasNuevas ?? 0}
-      visitasPerfilMes={m?.visitasPerfil ?? 0}
-      resenasTotales={resenasHero}
+      resenasNuevasMes={resenasNuevasMesTotal}
+      resenasTotales={resenasTotalesTotal}
+      posicionCompetencia={posicionCompetencia}
       ubicaciones={ubicaciones}
       activoId={activo.id}
+      activoNombre={activo.nombre}
       codigoAcceso={c.codigoAcceso}
-      cuentaId={c.id}
       diasConTaps={diasConTaps}
       labelsTaps={labelsTaps}
       nfcPorDia={nfcPorDia}
       qrPorDia={qrPorDia}
       tieneSoporteQr={tieneSoporteQr}
-      resenasRecientes={resenas.slice(0, 3)}
+      resenasPendientes={resenasPendientes.slice(0, 3)}
+      tonoMarca={c.tonoMarca}
       temasRecurrentes={resumenResenas.temasRecurrentes}
     />
   );
@@ -290,8 +347,8 @@ export default async function PortalPage({
       sucursalesLength={sucursales.length}
       ubicaciones={ubicaciones}
       activoId={activo.id}
+      modoTodos={modoTodos}
       codigoAcceso={c.codigoAcceso}
-      cuentaId={c.id}
       ratingHero={ratingHero}
       resenasHero={resenasHero}
       deltaRatingHero={deltaRatingHero}
@@ -370,7 +427,9 @@ export default async function PortalPage({
   return (
     <PortalShell
       clienteNombre={c.nombre}
-      clienteSub={`${activo.rubro} · ${activo.zona}${sucursales.length > 0 ? ` · ${activo.nombre}` : ""}${m ? ` · datos a ${fmtMes(m.mes)}` : ""}`}
+      clienteSub={`${activo.rubro} · ${activo.zona}${
+        sucursales.length > 0 ? ` · ${modoTodos ? `Todos los locales (${ubicaciones.length})` : activo.nombre}` : ""
+      }${m ? ` · datos a ${fmtMes(m.mes)}` : ""}`}
       planBadge={<PlanBadge plan={c.plan} mono />}
       google={{
         conectado: gbpConectado,
