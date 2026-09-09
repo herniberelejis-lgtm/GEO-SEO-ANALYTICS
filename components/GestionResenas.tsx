@@ -109,7 +109,13 @@ function TarjetaResena({
           </div>
           <div>
             <div className="text-sm font-medium text-slate-900">{resena.autor}</div>
-            <div className="text-xs text-slate-400">{fechaConHora(resena)}</div>
+            {/* suppressHydrationWarning: toLocaleDateString/toLocaleTimeString pueden
+                usar un espacio distinto antes de "a. m./p. m." según la versión de
+                ICU del motor (Node del server vs. el navegador) — mismo texto visible,
+                pero React lo marca como mismatch y re-renderiza el árbol entero. */}
+            <div className="text-xs text-slate-400" suppressHydrationWarning>
+              {fechaConHora(resena)}
+            </div>
           </div>
         </div>
         <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${COLOR_BADGE[resena.estrellas]}`}>
