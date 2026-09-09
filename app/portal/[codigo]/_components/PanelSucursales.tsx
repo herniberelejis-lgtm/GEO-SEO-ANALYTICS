@@ -3,7 +3,7 @@ import { IconBuilding } from "@/components/portal/PortalShell";
 import { CalificacionGoogleCard } from "@/components/portal/PortalResumen";
 import ScrollActiveIntoView from "@/components/ScrollActiveIntoView";
 import ScrollFadeRow from "@/components/ScrollFadeRow";
-import { hrefSucursal } from "../_lib";
+import { hrefSucursal, hrefTodos } from "../_lib";
 
 // Panel "Sucursales": selector de local dentro de la cuenta — el detalle
 // de cada uno (dispositivos, reseñas, evolución mensual) vive en las
@@ -12,8 +12,8 @@ export default function PanelSucursales({
   sucursalesLength,
   ubicaciones,
   activoId,
+  modoTodos,
   codigoAcceso,
-  cuentaId,
   ratingHero,
   resenasHero,
   deltaRatingHero,
@@ -25,8 +25,8 @@ export default function PanelSucursales({
   sucursalesLength: number;
   ubicaciones: Cliente[];
   activoId: string;
+  modoTodos: boolean;
   codigoAcceso: string;
-  cuentaId: string;
   ratingHero: number | null;
   resenasHero: number;
   deltaRatingHero: number | null;
@@ -65,11 +65,32 @@ export default function PanelSucursales({
           estar oculto según el navegador/SO). */}
       <div className="mb-4">
         <ScrollFadeRow>
+          {(() => {
+            const chipTodos = (
+              <a
+                href={hrefTodos(codigoAcceso)}
+                className={`shrink-0 rounded-full px-3.5 py-2 text-sm font-medium transition ${
+                  modoTodos
+                    ? "bg-brand text-white"
+                    : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50"
+                }`}
+              >
+                Todos
+              </a>
+            );
+            return modoTodos ? (
+              <ScrollActiveIntoView key="todos">{chipTodos}</ScrollActiveIntoView>
+            ) : (
+              <div key="todos" className="contents">
+                {chipTodos}
+              </div>
+            );
+          })()}
           {ubicaciones.map((s) => {
-            const activa = s.id === activoId;
+            const activa = !modoTodos && s.id === activoId;
             const chip = (
               <a
-                href={hrefSucursal(codigoAcceso, cuentaId, s)}
+                href={hrefSucursal(codigoAcceso, s)}
                 className={`shrink-0 rounded-full px-3.5 py-2 text-sm font-medium transition ${
                   activa
                     ? "bg-brand text-white"
@@ -94,25 +115,35 @@ export default function PanelSucursales({
       </div>
 
       <div className="space-y-4">
-        {ratingHero !== null && (
-          <CalificacionGoogleCard
-            rating={ratingHero}
-            totalResenas={resenasHero}
-            deltaRating={deltaRatingHero}
-            deltaResenas={deltaResenasHero}
-            nombre={activoNombre}
-            subtitulo={`${activoRubro} · ${activoZona}`}
-          />
-        )}
+        {modoTodos ? (
+          <p className="text-sm text-slate-500">
+            Estás viendo <b className="text-slate-700">todos tus locales combinados</b> — el resumen
+            general está en la pestaña Resumen. Elegí un local acá arriba para ver su rating, sus
+            dispositivos y sus reseñas por separado.
+          </p>
+        ) : (
+          <>
+            {ratingHero !== null && (
+              <CalificacionGoogleCard
+                rating={ratingHero}
+                totalResenas={resenasHero}
+                deltaRating={deltaRatingHero}
+                deltaResenas={deltaResenasHero}
+                nombre={activoNombre}
+                subtitulo={`${activoRubro} · ${activoZona}`}
+              />
+            )}
 
-        {/* El detalle de este local (dispositivos, reseñas, evolución
-            mensual) ya se ve en las otras pestañas de "Mi Negocio" — acá
-            solo se elige el local, para no repetir las mismas tarjetas
-            dos veces. */}
-        <p className="text-xs text-slate-400">
-          El resto de las pestañas de Mi Negocio (Dispositivos, Reseñas, Resumen del mes) ya muestran
-          el detalle de <b className="text-slate-500">{activoNombre}</b>, el local elegido acá arriba.
-        </p>
+            {/* El detalle de este local (dispositivos, reseñas, evolución
+                mensual) ya se ve en las otras pestañas de "Mi Negocio" — acá
+                solo se elige el local, para no repetir las mismas tarjetas
+                dos veces. */}
+            <p className="text-xs text-slate-400">
+              El resto de las pestañas de Mi Negocio (Dispositivos, Reseñas, Resumen del mes) ya muestran
+              el detalle de <b className="text-slate-500">{activoNombre}</b>, el local elegido acá arriba.
+            </p>
+          </>
+        )}
       </div>
     </>
   );
