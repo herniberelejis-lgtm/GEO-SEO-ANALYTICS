@@ -470,6 +470,10 @@ export default async function PortalPage({
         posicion={posicionCompetencia}
         benchmark={benchmark}
         crecimientoVsCompetencia={crecimientoVsCompetencia}
+        modoTodos={modoTodos}
+        ubicaciones={ubicaciones}
+        activoId={activo.id}
+        codigoAcceso={c.codigoAcceso}
       />
     );
   }
