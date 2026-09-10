@@ -1,4 +1,4 @@
-import type { Cliente, ResenaCRM, TonoMarca } from "@/lib/types";
+import type { Cliente } from "@/lib/types";
 import type { TerminoFrecuente } from "@/lib/keywords";
 import { fmtNum } from "@/lib/format";
 import { IconWave, SectionHeading } from "@/components/ui";
@@ -13,9 +13,7 @@ import {
 } from "@/components/portal/PortalResumen";
 import { IconSearch } from "@/components/portal/PortalShell";
 import SugerenciasRepetidas from "@/components/portal/SugerenciasRepetidas";
-import PrioridadesPanel, { type Prioridad } from "@/components/portal/PrioridadesPanel";
 import TapsPorSoporteChart from "@/components/TapsPorSoporteChart";
-import GestionResenas from "@/components/GestionResenas";
 import { resenasApiHabilitada } from "@/lib/google-reviews";
 import { heroDeCalificacion, hrefSucursal, hrefTodos } from "../_lib";
 import SelectorSucursales from "./SelectorSucursales";
@@ -23,22 +21,24 @@ import SelectorSucursales from "./SelectorSucursales";
 // Panel "Resumen": de un vistazo, para abrir el portal y entender el estado
 // del negocio sin tener que entrar a ninguna otra sección todavía.
 //
-// El orden de las secciones no es casual: va de la métrica que más "vale"
-// (la prueba de que el servicio funciona: tu calificación mejoró, y cómo
-// estás parado frente a la competencia) a la más barata (actividad cruda
-// del cartel — un tap solo no dice nada sin el contexto de arriba). En el
-// medio, reseñas (lo que explica ese resultado y lo único urgente/con
-// acción) y alcance real en Google (llamadas, cómo llegar — depende de que
-// el cliente conecte su cuenta, así que va después de lo que siempre está
-// disponible).
+// El orden de las secciones no es casual — y no arranca con la calificación.
+// Tu rating ya lo podés ver abriendo Google Maps vos mismo; no hace falta
+// MetricsField para eso. Lo primero acá tiene que ser lo que SOLO nosotros
+// te damos: qué se queja la gente y cuánto de eso es grave — inteligencia
+// que no existe en ningún lado de Google. Recién después viene la
+// calificación (tier 2), el alcance real en Google (tier 3, depende de que
+// el cliente conecte su cuenta) y por último la actividad cruda del cartel
+// (tier 4 — un tap solo no dice nada sin el contexto de arriba). "Necesita
+// tu atención" se sacó de acá: ahora vive en la barra lateral (PortalShell),
+// visible en cualquier pestaña, no compitiendo con esta información.
 export default function PanelResumen({
   mensajeGoogle,
-  prioridades,
   modoTodos,
   totalTapsHistorico,
   resenasHoy,
   resenasNuevasMes,
   resenasTotales,
+  resenasNegativas,
   posicionCompetencia,
   visitasPerfil,
   llamadas,
@@ -53,18 +53,17 @@ export default function PanelResumen({
   nfcPorDia,
   qrPorDia,
   tieneSoporteQr,
-  resenasPendientes,
-  tonoMarca,
   temasRecurrentes,
 }: {
   mensajeGoogle: { texto: string; tono: "ok" | "error" } | null;
-  prioridades: Prioridad[];
   /** true = viendo el combinado de todos los locales (default con >1 local); false = un local puntual elegido. */
   modoTodos: boolean;
   totalTapsHistorico: number;
   resenasHoy: number;
   resenasNuevasMes: number;
   resenasTotales: number;
+  /** Reseñas de 3★ o menos — la métrica que dispara la sección de arriba. */
+  resenasNegativas: number;
   /** null si no aplica: en modo combinado, sin rating, o sin competidores cargados con rating. */
   posicionCompetencia: { puesto: number; total: number } | null;
   /** Business Profile Performance API — visitas/llamadas/cómo llegar del mes
@@ -86,8 +85,6 @@ export default function PanelResumen({
   nfcPorDia: number[];
   qrPorDia: number[];
   tieneSoporteQr: boolean;
-  resenasPendientes: ResenaCRM[];
-  tonoMarca: TonoMarca;
   temasRecurrentes: TerminoFrecuente[];
 }) {
   const hayVarios = ubicaciones.length > 1;
@@ -102,11 +99,6 @@ export default function PanelResumen({
           {mensajeGoogle.texto}
         </div>
       )}
-
-      {/* Lo único que requiere una acción del dueño, ordenado por
-          urgencia — todo lo demás en este portal es informativo. Arranca
-          colapsado (ver PrioridadesPanel) para no ocupar media pantalla. */}
-      <PrioridadesPanel prioridades={prioridades} />
 
       {/* Con más de un local: selector arriba de todo para poder saltar de
           uno a otro sin ir a la pestaña Sucursales (elegir un local ahí
@@ -142,16 +134,62 @@ export default function PanelResumen({
         </div>
       )}
 
-      {/* TIER 1 — la prueba de que esto funciona: tu calificación mejoró
-          desde que empezaste (ya la trae cada CalificacionGoogleCard, "Desde
-          que usás MetricsField") y cómo estás parado frente a la
-          competencia. Es lo primero que un dueño necesita ver para creer
-          que vale la pena seguir pagando — todo lo demás explica o suma a
-          esto. */}
-      <SectionHeading title="Tu resultado" subtitle="lo que prueba que MetricsField está funcionando" />
+      {/* TIER 1 — lo que Google no te muestra: de qué se queja la gente y
+          cuánto de eso es grave. Es la razón de ser de MetricsField (no
+          somos un espejo de tu ficha de Google, somos el análisis arriba de
+          eso) — por eso va primero, antes que la calificación. El detalle
+          completo (responder cada una, ver todas) vive en la pestaña
+          Reseñas — acá va compacto, con el link para saltar para allá. */}
+      <SectionHeading title="Lo que Google no te muestra" subtitle="de qué se queja la gente, y cuánto es grave" />
 
-      {posicionCompetencia && (
-        <div className="mb-4 flex flex-wrap gap-3">
+      <div className="mb-4 flex flex-wrap gap-3">
+        <div className="min-w-[150px] max-w-[220px] flex-1">
+          <StatChip
+            icon={<IconStarChip size={17} className="text-slate-700" />}
+            value={fmtNum(resenasNegativas)}
+            label="Reseñas negativas (≤3★)"
+          />
+        </div>
+      </div>
+
+      <SugerenciasRepetidas temas={temasRecurrentes} apiHabilitada={resenasApiHabilitada()} />
+
+      <a
+        href="#resenas"
+        className="mt-3 block rounded-2xl border border-slate-200 bg-white/60 px-4 py-2.5 text-sm font-medium text-brand-fg transition hover:border-slate-300 hover:bg-white"
+      >
+        Ver y responder todas tus reseñas →
+      </a>
+
+      {/* TIER 2 — tu calificación: la prueba de resultado, pero ya no
+          arranca la página — la podés ver vos mismo en Google Maps sin
+          nosotros. Sigue siendo clave (el "Desde que usás MetricsField" de
+          cada tarjeta), solo que no es lo primero. */}
+      <SectionHeading title="Tu calificación" subtitle="tu progreso desde que usás MetricsField" />
+
+      <div className="mb-4 flex flex-wrap gap-3">
+        <div className="min-w-[150px] max-w-[220px] flex-1">
+          <StatChip
+            icon={<IconStarChip size={17} className="text-slate-700" />}
+            value={fmtNum(resenasHoy)}
+            label="Reseñas hoy"
+          />
+        </div>
+        <div className="min-w-[150px] max-w-[220px] flex-1">
+          <StatChip
+            icon={<IconStarChip size={17} className="text-slate-700" />}
+            value={fmtNum(resenasNuevasMes)}
+            label="Reseñas este mes"
+          />
+        </div>
+        <div className="min-w-[150px] max-w-[220px] flex-1">
+          <StatChip
+            icon={<IconCrecimiento size={18} className="text-slate-700" />}
+            value={fmtNum(resenasTotales)}
+            label="Reseñas totales"
+          />
+        </div>
+        {posicionCompetencia && (
           <div className="min-w-[150px] max-w-[220px] flex-1">
             <StatChip
               icon={<IconSearch size={17} className="text-slate-700" />}
@@ -159,8 +197,8 @@ export default function PanelResumen({
               label="Posición vs. competencia"
             />
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Rendimiento: una tarjeta por local, siempre (aunque sea uno solo)
           — mismo formato en toda la cartera. Flexbox con wrap, no grid: a
@@ -214,52 +252,12 @@ export default function PanelResumen({
         </div>
       </div>
 
-      {/* TIER 2 — reseñas: lo que explica el resultado de arriba (volumen,
-          quejas) y lo único con una acción real pendiente (responder). */}
-      <SectionHeading title="Reseñas" subtitle="lo que la gente dice, y lo que falta responder" />
-
-      <div className="mb-4 flex flex-wrap gap-3">
-        <div className="min-w-[150px] max-w-[220px] flex-1">
-          <StatChip
-            icon={<IconStarChip size={17} className="text-slate-700" />}
-            value={fmtNum(resenasHoy)}
-            label="Reseñas hoy"
-          />
-        </div>
-        <div className="min-w-[150px] max-w-[220px] flex-1">
-          <StatChip
-            icon={<IconStarChip size={17} className="text-slate-700" />}
-            value={fmtNum(resenasNuevasMes)}
-            label="Reseñas este mes"
-          />
-        </div>
-        <div className="min-w-[150px] max-w-[220px] flex-1">
-          <StatChip
-            icon={<IconCrecimiento size={18} className="text-slate-700" />}
-            value={fmtNum(resenasTotales)}
-            label="Reseñas totales"
-          />
-        </div>
-      </div>
-
-      <div className="mb-4">
-        <GestionResenas
-          resenasIniciales={resenasPendientes}
-          tonoMarca={tonoMarca}
-          codigo={codigoAcceso}
-          comercioId={activoId}
-        />
-      </div>
-
-      <SugerenciasRepetidas temas={temasRecurrentes} apiHabilitada={resenasApiHabilitada()} />
-
       {/* TIER 3 — alcance real en Google (Business Profile Performance API):
           cuánta gente te vio, te llamó o pidió cómo llegar. Solo existe si
           el propio cliente conectó su cuenta desde acá — mientras la app de
           MetricsField no esté verificada por Google, ese permiso vence cada
-          ~7 días (ver PrioridadesPanel/gbpPorVencer), así que sin conexión
-          activa no hay nada honesto que mostrar: mejor la invitación a
-          conectar que un 0 fijo que confunde. */}
+          ~7 días, así que sin conexión activa no hay nada honesto que
+          mostrar: mejor la invitación a conectar que un 0 fijo que confunde. */}
       <SectionHeading
         title="Alcance en Google"
         subtitle="cuánta gente te vio, te llamó o pidió cómo llegar este mes"

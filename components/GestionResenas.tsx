@@ -41,13 +41,11 @@ function TarjetaResena({
   resena,
   tonoMarca,
   codigo,
-  comercioId,
   onResuelta,
 }: {
   resena: ResenaCRM;
   tonoMarca: TonoMarca;
   codigo: string;
-  comercioId: string;
   onResuelta: (id: number) => void;
 }) {
   const [intento, setIntento] = useState(0);
@@ -74,7 +72,7 @@ function TarjetaResena({
   function aprobar() {
     const fd = new FormData();
     fd.set("codigo", codigo);
-    fd.set("comercioId", comercioId);
+    fd.set("comercioId", resena.comercioId);
     fd.set("id", String(resena.id));
     fd.set("respuesta", respuesta);
     startTransition(async () => {
@@ -87,7 +85,7 @@ function TarjetaResena({
   function descartar() {
     const fd = new FormData();
     fd.set("codigo", codigo);
-    fd.set("comercioId", comercioId);
+    fd.set("comercioId", resena.comercioId);
     fd.set("id", String(resena.id));
     startTransition(async () => {
       await accionDescartarResenaPortal(fd);
@@ -175,14 +173,13 @@ export default function GestionResenas({
   resenasIniciales,
   tonoMarca,
   codigo,
-  comercioId,
 }: {
   resenasIniciales: ResenaCRM[];
   tonoMarca: TonoMarca;
   codigo: string;
-  comercioId: string;
 }) {
   const [pendientes, setPendientes] = useState(resenasIniciales);
+  const [aprobandoTodas, startAprobarTodas] = useTransition();
 
   if (pendientes.length === 0) {
     return (
@@ -192,11 +189,45 @@ export default function GestionResenas({
     );
   }
 
+  // Aprobar todas de una: usa la respuesta sugerida tal cual quedó para cada
+  // una (la que ya trae generada, o la que se haya editado a mano en su
+  // propia tarjeta no se ve reflejada acá — cada tarjeta mantiene su propio
+  // estado de edición). Sigue sin poder publicar en Google por su cuenta
+  // (esa API todavía no la aprobó Google): esto aprueba y deja todo listo
+  // para copiar y pegar, no dispara nada en Google.
+  function aprobarTodas() {
+    startAprobarTodas(async () => {
+      await Promise.all(
+        pendientes.map((r) => {
+          const fd = new FormData();
+          fd.set("codigo", codigo);
+          fd.set("comercioId", r.comercioId);
+          fd.set("id", String(r.id));
+          fd.set("respuesta", r.respuestaSugerida || generarRespuestaSugerida(r.autor, r.estrellas, r.texto, tonoMarca, 0));
+          return accionAprobarResenaPortal(fd);
+        }),
+      );
+      setPendientes([]);
+    });
+  }
+
   return (
     <div>
-      <p className="mb-3 text-xs text-slate-500">
-        {pendientes.length} reseña{pendientes.length === 1 ? "" : "s"} esperando respuesta.
-      </p>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs text-slate-500">
+          {pendientes.length} reseña{pendientes.length === 1 ? "" : "s"} esperando respuesta.
+        </p>
+        {pendientes.length > 1 && (
+          <button
+            type="button"
+            disabled={aprobandoTodas}
+            onClick={aprobarTodas}
+            className={`${btnSuccess} !px-3.5 !py-1.5 !text-xs`}
+          >
+            <IconCheck size={13} /> {aprobandoTodas ? "Aprobando…" : "Aprobar todas"}
+          </button>
+        )}
+      </div>
       <div className="space-y-3">
         {pendientes.map((r) => (
           <TarjetaResena
@@ -204,7 +235,6 @@ export default function GestionResenas({
             resena={r}
             tonoMarca={tonoMarca}
             codigo={codigo}
-            comercioId={comercioId}
             onResuelta={(id) => setPendientes((prev) => prev.filter((x) => x.id !== id))}
           />
         ))}
