@@ -7,6 +7,7 @@ import {
   getResenas,
   actualizarResena,
   actualizarAutomatizacionResenas,
+  responderResenaEnGoogle,
   getTapsPorHora,
   desconectarGoogleComercio,
   getLink,
@@ -42,20 +43,31 @@ async function reseñaDelComercio(codigo: string, comercioId: string, resenaId: 
   return { comercio, resena };
 }
 
-export async function accionAprobarResenaPortal(fd: FormData): Promise<void> {
+export async function accionAprobarResenaPortal(fd: FormData): Promise<{ publicada: boolean }> {
   const codigo = String(fd.get("codigo") ?? "");
   const comercioId = String(fd.get("comercioId") ?? "");
   const id = Number(fd.get("id"));
   const respuesta = String(fd.get("respuesta") ?? "").trim().slice(0, 2000);
-  await reseñaDelComercio(codigo, comercioId, id);
+  const { resena } = await reseñaDelComercio(codigo, comercioId, id);
   if (!respuesta) throw new Error("La respuesta no puede quedar vacía.");
+
+  // Si la reseña vino sincronizada de Google y ya tenemos acceso a la
+  // Reviews API, "aprobar" la publica de una en la ficha real — antes
+  // quedaba SIEMPRE en modo copiar y pegar, incluso el día que Google
+  // apruebe el acceso. Sin esas dos condiciones (o si Google la rechaza),
+  // cae al comportamiento de siempre; el llamador (portal) le muestra al
+  // dueño cuál de los dos pasó.
+  const publicada = resena.origenGoogleId
+    ? await responderResenaEnGoogle(comercioId, resena.origenGoogleId, respuesta)
+    : false;
 
   await actualizarResena(id, {
     respuestaSugerida: respuesta,
-    respuestaPublicada: true,
+    respuestaPublicada: publicada,
     estado: "respondida",
   });
   revalidatePath(`/portal/${codigo}`);
+  return { publicada };
 }
 
 export async function accionDescartarResenaPortal(fd: FormData): Promise<void> {
