@@ -1,12 +1,15 @@
 import type { Cliente, ResenaCRM, TonoMarca } from "@/lib/types";
 import type { TerminoFrecuente } from "@/lib/keywords";
 import { fmtNum } from "@/lib/format";
-import { IconWave } from "@/components/ui";
+import { IconWave, SectionHeading } from "@/components/ui";
 import {
   StatChip,
   CalificacionGoogleCard,
   IconStarChip,
   IconCrecimiento,
+  IconEyeChip,
+  IconPhoneChip,
+  IconDirectionsChip,
 } from "@/components/portal/PortalResumen";
 import { IconSearch } from "@/components/portal/PortalShell";
 import SugerenciasRepetidas from "@/components/portal/SugerenciasRepetidas";
@@ -17,8 +20,17 @@ import { resenasApiHabilitada } from "@/lib/google-reviews";
 import { heroDeCalificacion, hrefSucursal, hrefTodos } from "../_lib";
 import SelectorSucursales from "./SelectorSucursales";
 
-// Panel "Resumen": de un vistazo, para abrir el portal y entender el
-// estado del negocio sin tener que entrar a ninguna otra sección todavía.
+// Panel "Resumen": de un vistazo, para abrir el portal y entender el estado
+// del negocio sin tener que entrar a ninguna otra sección todavía.
+//
+// El orden de las secciones no es casual: va de la métrica que más "vale"
+// (la prueba de que el servicio funciona: tu calificación mejoró, y cómo
+// estás parado frente a la competencia) a la más barata (actividad cruda
+// del cartel — un tap solo no dice nada sin el contexto de arriba). En el
+// medio, reseñas (lo que explica ese resultado y lo único urgente/con
+// acción) y alcance real en Google (llamadas, cómo llegar — depende de que
+// el cliente conecte su cuenta, así que va después de lo que siempre está
+// disponible).
 export default function PanelResumen({
   mensajeGoogle,
   prioridades,
@@ -28,6 +40,10 @@ export default function PanelResumen({
   resenasNuevasMes,
   resenasTotales,
   posicionCompetencia,
+  visitasPerfil,
+  llamadas,
+  comoLlegar,
+  conexionGoogle,
   ubicaciones,
   activoId,
   activoNombre,
@@ -51,6 +67,16 @@ export default function PanelResumen({
   resenasTotales: number;
   /** null si no aplica: en modo combinado, sin rating, o sin competidores cargados con rating. */
   posicionCompetencia: { puesto: number; total: number } | null;
+  /** Business Profile Performance API — visitas/llamadas/cómo llegar del mes
+   * en curso, de la cuenta de Google que el propio cliente conectó (suma de
+   * todos los locales en modo combinado). Solo tiene sentido mostrarlo si
+   * `conexionGoogle` es true — sin conectar, es siempre 0 y confunde más de
+   * lo que informa. */
+  visitasPerfil: number;
+  llamadas: number;
+  comoLlegar: number;
+  /** true si el local activo (o, en combinado, al menos uno de los locales) tiene su Google conectado. */
+  conexionGoogle: boolean;
   ubicaciones: Cliente[];
   activoId: string;
   activoNombre: string;
@@ -116,39 +142,16 @@ export default function PanelResumen({
         </div>
       )}
 
-      {/* De un vistazo: para abrir el portal y entender el estado del
-          negocio sin tener que entrar a ninguna otra sección todavía.
-          Flexbox con wrap (no grid de columnas fijas) para que la última
-          fila reparta el espacio sobrante en vez de dejar un chip angosto
-          solo — pasaba en mobile con grid-cols-2 y 5 chips (2+2+1).
-          "Visitas al perfil" no se muestra: depende de la Business Profile
-          Performance API, todavía sin aprobar por Google — mostrar un 0
-          fijo ahí confunde más de lo que informa. En su lugar, cuando hay
-          datos, la posición frente a la competencia — eso sí sale con lo
-          que Google Places ya nos da hoy. */}
-      <div className="mb-4 flex flex-wrap gap-3">
-        <div className="min-w-[150px] max-w-[220px] flex-1">
-          <StatChip
-            icon={<IconWave size={18} className="text-slate-700" />}
-            value={fmtNum(totalTapsHistorico)}
-            label="Taps del cartel"
-          />
-        </div>
-        <div className="min-w-[150px] max-w-[220px] flex-1">
-          <StatChip
-            icon={<IconStarChip size={17} className="text-slate-700" />}
-            value={fmtNum(resenasHoy)}
-            label="Reseñas hoy"
-          />
-        </div>
-        <div className="min-w-[150px] max-w-[220px] flex-1">
-          <StatChip
-            icon={<IconStarChip size={17} className="text-slate-700" />}
-            value={fmtNum(resenasNuevasMes)}
-            label="Reseñas este mes"
-          />
-        </div>
-        {posicionCompetencia && (
+      {/* TIER 1 — la prueba de que esto funciona: tu calificación mejoró
+          desde que empezaste (ya la trae cada CalificacionGoogleCard, "Desde
+          que usás MetricsField") y cómo estás parado frente a la
+          competencia. Es lo primero que un dueño necesita ver para creer
+          que vale la pena seguir pagando — todo lo demás explica o suma a
+          esto. */}
+      <SectionHeading title="Tu resultado" subtitle="lo que prueba que MetricsField está funcionando" />
+
+      {posicionCompetencia && (
+        <div className="mb-4 flex flex-wrap gap-3">
           <div className="min-w-[150px] max-w-[220px] flex-1">
             <StatChip
               icon={<IconSearch size={17} className="text-slate-700" />}
@@ -156,15 +159,8 @@ export default function PanelResumen({
               label="Posición vs. competencia"
             />
           </div>
-        )}
-        <div className="min-w-[150px] max-w-[220px] flex-1">
-          <StatChip
-            icon={<IconCrecimiento size={18} className="text-slate-700" />}
-            value={fmtNum(resenasTotales)}
-            label="Reseñas totales"
-          />
         </div>
-      </div>
+      )}
 
       {/* Rendimiento: una tarjeta por local, siempre (aunque sea uno solo)
           — mismo formato en toda la cartera. Flexbox con wrap, no grid: a
@@ -218,29 +214,35 @@ export default function PanelResumen({
         </div>
       </div>
 
-      {/* Actividad: escaneos recientes + reseñas que esperan respuesta, uno
-          al lado del otro en desktop, apilados en mobile. Las reseñas usan
-          el mismo componente de "Gestión de reseñas" (respuesta sugerida,
-          editable, para copiar a Google) en vez de una lista de solo
-          lectura — así se puede responder desde acá mismo, sin ir a la
-          pestaña de Reseñas. */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {diasConTaps.length > 0 ? (
-          <TapsPorSoporteChart
-            labels={labelsTaps}
-            fechas={diasConTaps}
-            nfc={nfcPorDia}
-            qr={qrPorDia}
-            mostrarQr={tieneSoporteQr}
-            codigo={codigoAcceso}
-            comercioId={activoId}
+      {/* TIER 2 — reseñas: lo que explica el resultado de arriba (volumen,
+          quejas) y lo único con una acción real pendiente (responder). */}
+      <SectionHeading title="Reseñas" subtitle="lo que la gente dice, y lo que falta responder" />
+
+      <div className="mb-4 flex flex-wrap gap-3">
+        <div className="min-w-[150px] max-w-[220px] flex-1">
+          <StatChip
+            icon={<IconStarChip size={17} className="text-slate-700" />}
+            value={fmtNum(resenasHoy)}
+            label="Reseñas hoy"
           />
-        ) : (
-          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-sm font-semibold text-slate-800">Escaneos</p>
-            <p className="mt-2 text-sm text-slate-500">Todavía no hay actividad del cartel.</p>
-          </div>
-        )}
+        </div>
+        <div className="min-w-[150px] max-w-[220px] flex-1">
+          <StatChip
+            icon={<IconStarChip size={17} className="text-slate-700" />}
+            value={fmtNum(resenasNuevasMes)}
+            label="Reseñas este mes"
+          />
+        </div>
+        <div className="min-w-[150px] max-w-[220px] flex-1">
+          <StatChip
+            icon={<IconCrecimiento size={18} className="text-slate-700" />}
+            value={fmtNum(resenasTotales)}
+            label="Reseñas totales"
+          />
+        </div>
+      </div>
+
+      <div className="mb-4">
         <GestionResenas
           resenasIniciales={resenasPendientes}
           tonoMarca={tonoMarca}
@@ -249,12 +251,84 @@ export default function PanelResumen({
         />
       </div>
 
-      <div className="mt-4">
-        <SugerenciasRepetidas
-          temas={temasRecurrentes}
-          apiHabilitada={resenasApiHabilitada()}
-        />
+      <SugerenciasRepetidas temas={temasRecurrentes} apiHabilitada={resenasApiHabilitada()} />
+
+      {/* TIER 3 — alcance real en Google (Business Profile Performance API):
+          cuánta gente te vio, te llamó o pidió cómo llegar. Solo existe si
+          el propio cliente conectó su cuenta desde acá — mientras la app de
+          MetricsField no esté verificada por Google, ese permiso vence cada
+          ~7 días (ver PrioridadesPanel/gbpPorVencer), así que sin conexión
+          activa no hay nada honesto que mostrar: mejor la invitación a
+          conectar que un 0 fijo que confunde. */}
+      <SectionHeading
+        title="Alcance en Google"
+        subtitle="cuánta gente te vio, te llamó o pidió cómo llegar este mes"
+      />
+
+      {conexionGoogle ? (
+        <div className="mb-4 flex flex-wrap gap-3">
+          <div className="min-w-[150px] max-w-[220px] flex-1">
+            <StatChip
+              icon={<IconEyeChip size={18} className="text-slate-700" />}
+              value={fmtNum(visitasPerfil)}
+              label="Visitas al perfil"
+            />
+          </div>
+          <div className="min-w-[150px] max-w-[220px] flex-1">
+            <StatChip
+              icon={<IconPhoneChip size={17} className="text-slate-700" />}
+              value={fmtNum(llamadas)}
+              label="Llamadas"
+            />
+          </div>
+          <div className="min-w-[150px] max-w-[220px] flex-1">
+            <StatChip
+              icon={<IconDirectionsChip size={18} className="text-slate-700" />}
+              value={fmtNum(comoLlegar)}
+              label="Cómo llegar"
+            />
+          </div>
+        </div>
+      ) : (
+        <a
+          href="#rating"
+          className="mb-4 block rounded-3xl border border-dashed border-slate-300 bg-white/50 p-4 text-sm text-slate-600 transition hover:border-slate-400 hover:bg-white"
+        >
+          Conectá tu Google Business Profile para ver cuánta gente te vio, te llamó o pidió cómo llegar. →
+        </a>
+      )}
+
+      {/* TIER 4 — actividad cruda del cartel: la más barata de las cuatro,
+          porque un tap solo no dice nada sin el contexto de arriba (no
+          todo tap termina en reseña ni en llamada) — por eso va al final. */}
+      <SectionHeading title="Tu cartel" subtitle="actividad de tus carteles NFC/QR" />
+
+      <div className="mb-4 flex flex-wrap gap-3">
+        <div className="min-w-[150px] max-w-[220px] flex-1">
+          <StatChip
+            icon={<IconWave size={18} className="text-slate-700" />}
+            value={fmtNum(totalTapsHistorico)}
+            label="Taps del cartel"
+          />
+        </div>
       </div>
+
+      {diasConTaps.length > 0 ? (
+        <TapsPorSoporteChart
+          labels={labelsTaps}
+          fechas={diasConTaps}
+          nfc={nfcPorDia}
+          qr={qrPorDia}
+          mostrarQr={tieneSoporteQr}
+          codigo={codigoAcceso}
+          comercioId={activoId}
+        />
+      ) : (
+        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-sm font-semibold text-slate-800">Escaneos</p>
+          <p className="mt-2 text-sm text-slate-500">Todavía no hay actividad del cartel.</p>
+        </div>
+      )}
     </>
   );
 }

@@ -211,6 +211,17 @@ export default async function PortalPage({
   let resenasHoy = resenas.filter((r) => r.fecha === hoyISO).length;
   let resenasNuevasMesTotal = m?.resenasNuevas ?? 0;
 
+  // Alcance en Google (Business Profile Performance API): visitas al
+  // perfil, llamadas y clics "cómo llegar" del mes en curso — solo existe
+  // por local si ESE local conectó su propia cuenta (ver
+  // sincronizarRendimiento en lib/db/google-sync.ts). En combinado se suma
+  // lo que haya de cada uno; `conexionGoogle` es true si AL MENOS uno de
+  // los locales conectó, para decidir si mostrar los números o la
+  // invitación a conectar.
+  let visitasPerfilTotal = m?.visitasPerfil ?? 0;
+  let llamadasTotal = m?.llamadas ?? 0;
+  let comoLlegarTotal = m?.clicsComoLlegar ?? 0;
+
   if (modoTodos && sucursales.length > 0) {
     const deLasSucursales = await Promise.all(
       sucursales.map(async (s) => {
@@ -222,8 +233,16 @@ export default async function PortalPage({
       totalTapsCombinado += linksS.reduce((acc, l) => acc + l.taps, 0);
       resenasHoy += resenasS.filter((r) => r.fecha === hoyISO).length;
       resenasNuevasMesTotal += metricaActual(s)?.resenasNuevas ?? 0;
+      const ms = metricaActual(s);
+      visitasPerfilTotal += ms?.visitasPerfil ?? 0;
+      llamadasTotal += ms?.llamadas ?? 0;
+      comoLlegarTotal += ms?.clicsComoLlegar ?? 0;
     }
   }
+
+  const conexionGoogle = modoTodos
+    ? ubicaciones.some((u) => Boolean(u.googleConectadoEn))
+    : gbpConectado;
 
   // Promedio de reseñas nuevas por mes, sobre todo el histórico cargado —
   // para "Evolución mes a mes", así el número no depende de mirar mes por
@@ -305,6 +324,10 @@ export default async function PortalPage({
       resenasNuevasMes={resenasNuevasMesTotal}
       resenasTotales={resenasTotalesTotal}
       posicionCompetencia={posicionCompetencia}
+      visitasPerfil={visitasPerfilTotal}
+      llamadas={llamadasTotal}
+      comoLlegar={comoLlegarTotal}
+      conexionGoogle={conexionGoogle}
       ubicaciones={ubicaciones}
       activoId={activo.id}
       activoNombre={activo.nombre}
