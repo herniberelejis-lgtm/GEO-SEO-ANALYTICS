@@ -18,6 +18,7 @@ import {
   type TopPiezaSemana,
 } from "@/lib/db";
 import { portalRequiereLoginGoogle, tieneAccesoPortal } from "@/lib/portal-auth";
+import { oauthVerificado } from "@/lib/google-oauth";
 import PortalGateGoogle from "./_components/PortalGateGoogle";
 import { metricaActual, metricaAnterior } from "@/lib/types";
 import { fmtMes } from "@/lib/format";
@@ -98,7 +99,10 @@ export default async function PortalPage({
   const diasConectado = activo.googleConectadoEn
     ? Math.floor((Date.now() - new Date(activo.googleConectadoEn).getTime()) / (1000 * 60 * 60 * 24))
     : null;
-  const gbpPorVencer = diasConectado !== null && diasConectado >= 6;
+  // Sin oauthVerificado(), la app sigue en modo Prueba de Google y el
+  // refresh token vence de verdad cada ~7 días — con la verificación hecha,
+  // este aviso ya no aplica nunca, sin importar cuántos días pasaron.
+  const gbpPorVencer = !oauthVerificado() && diasConectado !== null && diasConectado >= 6;
   const mensajeGoogle = google ? MENSAJE_GOOGLE[google] : null;
 
   const [tapsPorDiaSoporte, horasSemana, piezaMasUsada, links, checklist, audits, resenas, benchmark] =

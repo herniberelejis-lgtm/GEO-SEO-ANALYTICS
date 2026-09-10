@@ -160,6 +160,13 @@ export default function PanelResumen({
         <div className="min-w-[150px] max-w-[220px] flex-1">
           <StatChip
             icon={<IconStarChip size={17} className="text-slate-700" />}
+            value={fmtNum(resenasHoy)}
+            label="Reseñas hoy"
+          />
+        </div>
+        <div className="min-w-[150px] max-w-[220px] flex-1">
+          <StatChip
+            icon={<IconStarChip size={17} className="text-slate-700" />}
             value={fmtNum(resenasNegativas)}
             label="Reseñas negativas (≤3★)"
           />
@@ -290,10 +297,9 @@ export default function PanelResumen({
 
       {/* TIER 3 — alcance real en Google (Business Profile Performance API):
           cuánta gente te vio, te llamó o pidió cómo llegar. Solo existe si
-          el propio cliente conectó su cuenta desde acá — mientras la app de
-          MetricsField no esté verificada por Google, ese permiso vence cada
-          ~7 días, así que sin conexión activa no hay nada honesto que
-          mostrar: mejor la invitación a conectar que un 0 fijo que confunde. */}
+          el propio cliente conectó su cuenta desde acá — sin conexión activa
+          no hay nada honesto que mostrar: mejor la invitación a conectar que
+          un 0 fijo que confunde. */}
       <SectionHeading
         title="Alcance en Google"
         subtitle="cuánta gente te vio, te llamó o pidió cómo llegar este mes"
