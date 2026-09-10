@@ -30,7 +30,6 @@ import PortalShell, { type PortalNavEntry } from "@/components/portal/PortalShel
 import { heroDeCalificacion, MENSAJE_GOOGLE, construirNav } from "./_lib";
 import PanelResumen from "./_components/PanelResumen";
 import PanelResenas from "./_components/PanelResenas";
-import PanelSucursales from "./_components/PanelSucursales";
 import PanelDispositivos from "./_components/PanelDispositivos";
 import PanelEscaneos from "./_components/PanelEscaneos";
 import PanelRating from "./_components/PanelRating";
@@ -134,14 +133,7 @@ export default async function PortalPage({
     };
   }
 
-  const resenasPendientes = resenas.filter((r) => r.estado === "nueva");
   const resenasAutomaticas = resenas.filter((r) => r.publicadaAutomaticamente).slice(0, 5);
-
-  // Resumen de "cómo van las reseñas": distribución por estrellas, si la
-  // tendencia reciente mejora o empeora, y qué se repite en las quejas —
-  // sobre TODAS las reseñas, no solo las pendientes de responder. resenas
-  // viene ordenado por fecha DESC (getResenas): lo primero es lo más nuevo.
-  const resumenResenas = calcularResumenResenas(resenas);
 
   // Personal: taps reales de cada tarjeta NFC personal (links.nombreEmpleado)
   // + menciones de su nombre en el texto de las reseñas de este local. Los
@@ -222,6 +214,15 @@ export default async function PortalPage({
   let llamadasTotal = m?.llamadas ?? 0;
   let comoLlegarTotal = m?.clicsComoLlegar ?? 0;
 
+  // Reseñas combinadas: en modo "Todos" la pestaña Reseñas (y el resumen de
+  // quejas del Resumen) tienen que ver TODAS las reseñas de la cuenta, no
+  // solo las de la cuenta raíz — antes de esto, un cliente con reseñas
+  // cargadas únicamente en una sucursal veía la pestaña Reseñas directamente
+  // desaparecida al mirar el combinado (ver el `if` que la ocultaba más
+  // abajo, ahora sacado). Reordenamos por fecha DESC después de concatenar
+  // porque cada array llega ordenado por su cuenta, no en conjunto.
+  let resenasCombinadas = resenas;
+
   if (modoTodos && sucursales.length > 0) {
     const deLasSucursales = await Promise.all(
       sucursales.map(async (s) => {
@@ -237,8 +238,14 @@ export default async function PortalPage({
       visitasPerfilTotal += ms?.visitasPerfil ?? 0;
       llamadasTotal += ms?.llamadas ?? 0;
       comoLlegarTotal += ms?.clicsComoLlegar ?? 0;
+      resenasCombinadas = resenasCombinadas.concat(resenasS);
     }
+    resenasCombinadas = [...resenasCombinadas].sort((a, b) => b.fecha.localeCompare(a.fecha));
   }
+
+  const resenasPendientesCombinadas = resenasCombinadas.filter((r) => r.estado === "nueva");
+  const resenasNegativasTotal = resenasCombinadas.filter((r) => r.estrellas <= 3).length;
+  const resumenResenasCombinado = calcularResumenResenas(resenasCombinadas);
 
   const conexionGoogle = modoTodos
     ? ubicaciones.some((u) => Boolean(u.googleConectadoEn))
@@ -284,9 +291,9 @@ export default async function PortalPage({
   // ordenadas por urgencia. Todo lo demás del portal es "mirar" — esto es
   // lo único que hay que "hacer", así que va primero pase lo que pase.
   const prioridades: Prioridad[] = [];
-  if (resenasPendientes.length > 0) {
+  if (resenasPendientesCombinadas.length > 0) {
     prioridades.push({
-      texto: `${resenasPendientes.length} reseña${resenasPendientes.length === 1 ? "" : "s"} esperando tu respuesta`,
+      texto: `${resenasPendientesCombinadas.length} reseña${resenasPendientesCombinadas.length === 1 ? "" : "s"} esperando tu respuesta`,
       href: "#resenas",
       tono: "urgente",
     });
@@ -307,9 +314,7 @@ export default async function PortalPage({
   }
 
   const nav: PortalNavEntry[] = construirNav({
-    resenasPendientes: resenasPendientes.length,
-    sucursales: sucursales.length,
-    ubicaciones: ubicaciones.length,
+    resenasPendientes: resenasPendientesCombinadas.length,
   });
 
   const panels: Record<string, ReactNode> = {};
@@ -317,12 +322,12 @@ export default async function PortalPage({
   panels.resumen = (
     <PanelResumen
       mensajeGoogle={mensajeGoogle}
-      prioridades={prioridades}
       modoTodos={modoTodos}
       totalTapsHistorico={totalTapsCombinado}
       resenasHoy={resenasHoy}
       resenasNuevasMes={resenasNuevasMesTotal}
       resenasTotales={resenasTotalesTotal}
+      resenasNegativas={resenasNegativasTotal}
       posicionCompetencia={posicionCompetencia}
       visitasPerfil={visitasPerfilTotal}
       llamadas={llamadasTotal}
@@ -337,48 +342,36 @@ export default async function PortalPage({
       nfcPorDia={nfcPorDia}
       qrPorDia={qrPorDia}
       tieneSoporteQr={tieneSoporteQr}
-      resenasPendientes={resenasPendientes.slice(0, 3)}
-      tonoMarca={c.tonoMarca}
-      temasRecurrentes={resumenResenas.temasRecurrentes}
+      temasRecurrentes={resumenResenasCombinado.temasRecurrentes}
     />
   );
 
-  // Gestión de reseñas: el dueño edita/aprueba la respuesta sugerida para
-  // sus reseñas de Google, sin depender del equipo de MetricsField. Personal
-  // vive acá también (antes era su propio ítem de menú): son menciones
-  // dentro del texto de las reseñas, tiene más sentido leerlas junto a ellas
-  // que en una sección aparte.
-  if (resenas.length > 0 || personalEmpleados.length > 0) {
-    panels.resenas = (
-      <PanelResenas
-        resenas={resenas}
-        resenasPendientes={resenasPendientes}
-        resenasAutomaticas={resenasAutomaticas}
-        resumenResenas={resumenResenas}
-        personalEmpleados={personalEmpleados}
-        codigoAcceso={c.codigoAcceso}
-        comercioId={activo.id}
-        autoResponderPositivas={activo.autoResponderPositivas}
-        autoResponderUmbral={activo.autoResponderUmbral}
-        tonoMarca={c.tonoMarca}
-      />
-    );
-  }
-
-  panels.sucursales = (
-    <PanelSucursales
-      sucursalesLength={sucursales.length}
+  // Gestión de reseñas: el dueño edita/aprueba (o aprueba todas de una) la
+  // respuesta sugerida para sus reseñas de Google, sin depender del equipo
+  // de MetricsField. Siempre se arma, aunque no haya ninguna reseña
+  // cargada todavía — antes desaparecía del menú en ese caso (pasaba de
+  // verdad con clientes reales sin reseñas tipeadas a mano en el CRM), lo
+  // cual confundía más que mostrar el estado vacío. En modo combinado
+  // muestra las reseñas de TODOS los locales (resenasCombinadas), con el
+  // mismo selector de local que Resumen para poder acotar a uno solo.
+  // Personal vive acá también (antes era su propio ítem de menú): son
+  // menciones dentro del texto de las reseñas.
+  panels.resenas = (
+    <PanelResenas
+      resenas={resenasCombinadas}
+      resenasPendientes={resenasPendientesCombinadas}
+      resenasAutomaticas={resenasAutomaticas}
+      resumenResenas={resumenResenasCombinado}
+      personalEmpleados={personalEmpleados}
+      modoTodos={modoTodos}
       ubicaciones={ubicaciones}
       activoId={activo.id}
-      modoTodos={modoTodos}
-      codigoAcceso={c.codigoAcceso}
-      ratingHero={ratingHero}
-      resenasHero={resenasHero}
-      deltaRatingHero={deltaRatingHero}
-      deltaResenasHero={deltaResenasHero}
       activoNombre={activo.nombre}
-      activoRubro={activo.rubro}
-      activoZona={activo.zona}
+      codigoAcceso={c.codigoAcceso}
+      comercioId={activo.id}
+      autoResponderPositivas={activo.autoResponderPositivas}
+      autoResponderUmbral={activo.autoResponderUmbral}
+      tonoMarca={c.tonoMarca}
     />
   );
 
@@ -460,6 +453,7 @@ export default async function PortalPage({
         perfilPanelId: "rating",
       }}
       whatsappHref={AGENCIA_WHATSAPP ? waUrl(AGENCIA_WHATSAPP, `Hola! Te escribo por mi panel de ${c.nombre}`) : null}
+      prioridades={prioridades}
       nav={nav}
       panels={panels}
       defaultPanel="resumen"

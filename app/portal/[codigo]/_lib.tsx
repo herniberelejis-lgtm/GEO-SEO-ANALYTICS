@@ -75,19 +75,18 @@ export const MENSAJE_GOOGLE: Record<string, { texto: string; tono: "ok" | "error
 };
 
 // Menú simplificado: 3 secciones reales (antes eran 9). Todo lo
-// relacionado con "cómo va mi negocio" (locales, dispositivos, escaneos,
-// rating de Google, competencia, resumen del mes) vive junto adentro de
-// "Mi Negocio" — Personal se mudó adentro de Reseñas (son menciones de
-// reseñas) — y Ayuda ya no ocupa un ítem propio: el botón de WhatsApp del
-// header alcanza.
+// relacionado con "cómo va mi negocio" (dispositivos, escaneos, rating de
+// Google, competencia, resumen del mes) vive junto adentro de "Mi Negocio"
+// — Personal se mudó adentro de Reseñas (son menciones de reseñas) — y
+// Ayuda ya no ocupa un ítem propio: el botón de WhatsApp del header
+// alcanza. "Sucursales" se sacó del menú: elegir un local puntual ya se
+// hace desde el selector de chips que vive arriba de Resumen y de Reseñas
+// (ver SelectorSucursales) — la pestaña aparte solo repetía una sola
+// tarjeta sin agregar nada que esas dos no tuvieran ya.
 export function construirNav({
   resenasPendientes,
-  sucursales,
-  ubicaciones,
 }: {
   resenasPendientes: number;
-  sucursales: number;
-  ubicaciones: number;
 }): PortalNavEntry[] {
   return [
     { type: "leaf", id: "resumen", label: "Resumen", icon: <IconGrid size={18} /> },
@@ -109,25 +108,6 @@ export function construirNav({
       label: "Mi Negocio",
       icon: <IconBuilding size={18} />,
       items: [
-        {
-          type: "leaf",
-          id: "sucursales",
-          label: "Sucursales",
-          icon: <IconBuilding size={16} />,
-          badge:
-            sucursales === 0 ? (
-              <span className="rounded-full bg-slate-800 px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wide text-slate-400">
-                Pronto
-              </span>
-            ) : (
-              // Total de locales (cuenta + sucursales), no solo las
-              // sucursales hijas — mismo número que "Rendimiento · N
-              // locales" en Resumen.
-              <span className="rounded-full bg-slate-800 px-1.5 py-0.5 text-[10px] font-bold text-slate-300">
-                {ubicaciones}
-              </span>
-            ),
-        },
         { type: "leaf", id: "dispositivos", label: "Dispositivos", icon: <IconDevice size={16} /> },
         { type: "leaf", id: "escaneos", label: "Escaneos", icon: <IconWave size={16} /> },
         { type: "leaf", id: "rating", label: "Mi Rating en Google", icon: <IconStarNav size={16} /> },
