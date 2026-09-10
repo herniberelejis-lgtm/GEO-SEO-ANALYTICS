@@ -54,7 +54,39 @@ function IconPin({ size, className }: { size?: number; className?: string }) {
   );
 }
 
-export { IconTrendingUp as IconCrecimiento, IconStarChip };
+function IconEyeChip({ size, className }: { size?: number; className?: string }) {
+  return (
+    <IconBase size={size} className={className}>
+      <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z" />
+      <circle cx="12" cy="12" r="3" />
+    </IconBase>
+  );
+}
+
+function IconPhoneChip({ size, className }: { size?: number; className?: string }) {
+  return (
+    <IconBase size={size} className={className}>
+      <path d="M4.5 3.5h3.2l1.6 4-2 1.3a11.5 11.5 0 0 0 5.4 5.4l1.3-2 4 1.6v3.2a1.8 1.8 0 0 1-2 1.8C9.5 18.3 4.7 13.5 3.7 7A1.8 1.8 0 0 1 4.5 3.5z" />
+    </IconBase>
+  );
+}
+
+function IconDirectionsChip({ size, className }: { size?: number; className?: string }) {
+  return (
+    <IconBase size={size} className={className}>
+      <path d="M4 4v7a4 4 0 0 0 4 4h11" />
+      <path d="M14 11l5 4-5 4" />
+    </IconBase>
+  );
+}
+
+export {
+  IconTrendingUp as IconCrecimiento,
+  IconStarChip,
+  IconEyeChip,
+  IconPhoneChip,
+  IconDirectionsChip,
+};
 
 /** Card chica: ícono de color + número grande + etiqueta. Fila de "de un
  * vistazo" arriba del todo, antes de entrar en el detalle de cada sección. */
