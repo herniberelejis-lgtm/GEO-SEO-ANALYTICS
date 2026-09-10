@@ -1,5 +1,6 @@
 import type { Cliente } from "@/lib/types";
 import type { TerminoFrecuente } from "@/lib/keywords";
+import type { TapsPorHoraDia, TopPiezaSemana } from "@/lib/db";
 import { fmtNum } from "@/lib/format";
 import { IconWave, SectionHeading } from "@/components/ui";
 import {
@@ -14,6 +15,7 @@ import {
 import { IconSearch } from "@/components/portal/PortalShell";
 import SugerenciasRepetidas from "@/components/portal/SugerenciasRepetidas";
 import TapsPorSoporteChart from "@/components/TapsPorSoporteChart";
+import TapsPorHoraSemanaChart from "@/components/TapsPorHoraSemanaChart";
 import { resenasApiHabilitada } from "@/lib/google-reviews";
 import { heroDeCalificacion, hrefSucursal, hrefTodos } from "../_lib";
 import SelectorSucursales from "./SelectorSucursales";
@@ -39,6 +41,8 @@ export default function PanelResumen({
   resenasNuevasMes,
   resenasTotales,
   resenasNegativas,
+  horasSemana,
+  piezaMasUsada,
   posicionCompetencia,
   visitasPerfil,
   llamadas,
@@ -64,6 +68,12 @@ export default function PanelResumen({
   resenasTotales: number;
   /** Reseñas de 3★ o menos — la métrica que dispara la sección de arriba. */
   resenasNegativas: number;
+  /** Grilla día×hora de taps de los últimos 7 días — heatmap de "a qué hora te tocan el cartel". */
+  horasSemana: TapsPorHoraDia[];
+  /** El dispositivo con más taps de la semana — null si no hubo actividad. `local`
+   * solo viene cargado en modo combinado, para desambiguar si dos locales usan
+   * la misma etiqueta (ej. "Mostrador" en ambos). */
+  piezaMasUsada: (TopPiezaSemana & { local?: string }) | null;
   /** null si no aplica: en modo combinado, sin rating, o sin competidores cargados con rating. */
   posicionCompetencia: { puesto: number; total: number } | null;
   /** Business Profile Performance API — visitas/llamadas/cómo llegar del mes
@@ -134,13 +144,17 @@ export default function PanelResumen({
         </div>
       )}
 
-      {/* TIER 1 — lo que Google no te muestra: de qué se queja la gente y
-          cuánto de eso es grave. Es la razón de ser de MetricsField (no
-          somos un espejo de tu ficha de Google, somos el análisis arriba de
-          eso) — por eso va primero, antes que la calificación. El detalle
-          completo (responder cada una, ver todas) vive en la pestaña
-          Reseñas — acá va compacto, con el link para saltar para allá. */}
-      <SectionHeading title="Lo que Google no te muestra" subtitle="de qué se queja la gente, y cuánto es grave" />
+      {/* TIER 1 — lo que Google no te muestra: de qué se queja la gente, y
+          cómo usan tu cartel. Ninguna de las dos cosas existe en Google —
+          es la razón de ser de MetricsField (no somos un espejo de tu ficha
+          de Google, somos el análisis y el hardware arriba de eso) — por
+          eso va primero, antes que la calificación. El detalle completo de
+          reseñas (responder cada una, ver todas) vive en la pestaña Reseñas
+          — acá va compacto, con el link para saltar para allá. */}
+      <SectionHeading
+        title="Lo que Google no te muestra"
+        subtitle="de qué se queja la gente, y cómo usan tu cartel"
+      />
 
       <div className="mb-4 flex flex-wrap gap-3">
         <div className="min-w-[150px] max-w-[220px] flex-1">
@@ -150,9 +164,31 @@ export default function PanelResumen({
             label="Reseñas negativas (≤3★)"
           />
         </div>
+        <div className="min-w-[150px] max-w-[220px] flex-1">
+          <StatChip
+            icon={<IconWave size={18} className="text-slate-700" />}
+            value={fmtNum(totalTapsHistorico)}
+            label="Taps del cartel"
+          />
+        </div>
+        {piezaMasUsada && (
+          <div className="min-w-[150px] max-w-[220px] flex-1">
+            <StatChip
+              icon={<IconWave size={18} className="text-slate-700" />}
+              value={fmtNum(piezaMasUsada.taps)}
+              label={`Pieza más usada esta semana: ${piezaMasUsada.etiqueta}${
+                piezaMasUsada.local ? ` (${piezaMasUsada.local})` : ""
+              }`}
+            />
+          </div>
+        )}
       </div>
 
       <SugerenciasRepetidas temas={temasRecurrentes} apiHabilitada={resenasApiHabilitada()} />
+
+      <div className="mt-4">
+        <TapsPorHoraSemanaChart dias={horasSemana} />
+      </div>
 
       <a
         href="#resenas"
@@ -296,20 +332,10 @@ export default function PanelResumen({
         </a>
       )}
 
-      {/* TIER 4 — actividad cruda del cartel: la más barata de las cuatro,
-          porque un tap solo no dice nada sin el contexto de arriba (no
-          todo tap termina en reseña ni en llamada) — por eso va al final. */}
-      <SectionHeading title="Tu cartel" subtitle="actividad de tus carteles NFC/QR" />
-
-      <div className="mb-4 flex flex-wrap gap-3">
-        <div className="min-w-[150px] max-w-[220px] flex-1">
-          <StatChip
-            icon={<IconWave size={18} className="text-slate-700" />}
-            value={fmtNum(totalTapsHistorico)}
-            label="Taps del cartel"
-          />
-        </div>
-      </div>
+      {/* TIER 4 — NFC vs. QR por día: la más barata de las cuatro secciones
+          (el total de taps y su patrón horario ya se contaron en el tier 1)
+          — esto es el desglose por canal, día a día, para el final. */}
+      <SectionHeading title="Tu cartel" subtitle="taps por día, NFC vs. QR" />
 
       {diasConTaps.length > 0 ? (
         <TapsPorSoporteChart

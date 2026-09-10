@@ -6,12 +6,16 @@ import {
   getClientePorCodigo,
   getSucursales,
   getTapsPorDiaPorSoporte,
+  getTapsPorHoraSemana,
+  getPiezaMasUsadaSemana,
   getLinks,
   getChecklist,
   getAudits,
   getResenas,
   getBenchmarkMensual,
   getCompetidores,
+  type TapsPorHoraDia,
+  type TopPiezaSemana,
 } from "@/lib/db";
 import { portalRequiereLoginGoogle, tieneAccesoPortal } from "@/lib/portal-auth";
 import PortalGateGoogle from "./_components/PortalGateGoogle";
@@ -97,9 +101,11 @@ export default async function PortalPage({
   const gbpPorVencer = diasConectado !== null && diasConectado >= 6;
   const mensajeGoogle = google ? MENSAJE_GOOGLE[google] : null;
 
-  const [tapsPorDiaSoporte, links, checklist, audits, resenas, benchmark] =
+  const [tapsPorDiaSoporte, horasSemana, piezaMasUsada, links, checklist, audits, resenas, benchmark] =
     await Promise.all([
       getTapsPorDiaPorSoporte(activo.id, 14),
+      getTapsPorHoraSemana(activo.id),
+      getPiezaMasUsadaSemana(activo.id),
       getLinks(activo.id),
       getChecklist(activo.id),
       getAudits(activo.id),
@@ -223,14 +229,28 @@ export default async function PortalPage({
   // porque cada array llega ordenado por su cuenta, no en conjunto.
   let resenasCombinadas = resenas;
 
+  // Taps por hora (heatmap) y "pieza más usada": igual que todo lo de
+  // arriba, en combinado se suman/comparan entre todos los locales. La
+  // grilla hora×día se suma celda a celda (misma fecha, mismo huso ya
+  // resuelto en la consulta); la mejor pieza se elige por mayor taps de la
+  // semana, con el nombre del local para desambiguar si hay más de uno.
+  let horasSemanaCombinado = horasSemana;
+  let mejorPieza: (TopPiezaSemana & { local?: string }) | null = piezaMasUsada;
+
   if (modoTodos && sucursales.length > 0) {
     const deLasSucursales = await Promise.all(
       sucursales.map(async (s) => {
-        const [linksS, resenasS] = await Promise.all([getLinks(s.id), getResenas(s.id)]);
-        return { s, linksS, resenasS };
+        const [linksS, resenasS, horasS, piezaS] = await Promise.all([
+          getLinks(s.id),
+          getResenas(s.id),
+          getTapsPorHoraSemana(s.id),
+          getPiezaMasUsadaSemana(s.id),
+        ]);
+        return { s, linksS, resenasS, horasS, piezaS };
       }),
     );
-    for (const { s, linksS, resenasS } of deLasSucursales) {
+    if (mejorPieza) mejorPieza = { ...mejorPieza, local: activo.nombre };
+    for (const { s, linksS, resenasS, horasS, piezaS } of deLasSucursales) {
       totalTapsCombinado += linksS.reduce((acc, l) => acc + l.taps, 0);
       resenasHoy += resenasS.filter((r) => r.fecha === hoyISO).length;
       resenasNuevasMesTotal += metricaActual(s)?.resenasNuevas ?? 0;
@@ -239,6 +259,13 @@ export default async function PortalPage({
       llamadasTotal += ms?.llamadas ?? 0;
       comoLlegarTotal += ms?.clicsComoLlegar ?? 0;
       resenasCombinadas = resenasCombinadas.concat(resenasS);
+      horasSemanaCombinado = horasSemanaCombinado.map((dia) => {
+        const diaS = horasS.find((x) => x.fecha === dia.fecha);
+        return diaS ? { fecha: dia.fecha, horas: dia.horas.map((v, h) => v + diaS.horas[h]) } : dia;
+      });
+      if (piezaS && (!mejorPieza || piezaS.taps > mejorPieza.taps)) {
+        mejorPieza = { ...piezaS, local: s.nombre };
+      }
     }
     resenasCombinadas = [...resenasCombinadas].sort((a, b) => b.fecha.localeCompare(a.fecha));
   }
@@ -328,6 +355,8 @@ export default async function PortalPage({
       resenasNuevasMes={resenasNuevasMesTotal}
       resenasTotales={resenasTotalesTotal}
       resenasNegativas={resenasNegativasTotal}
+      horasSemana={horasSemanaCombinado}
+      piezaMasUsada={mejorPieza}
       posicionCompetencia={posicionCompetencia}
       visitasPerfil={visitasPerfilTotal}
       llamadas={llamadasTotal}
