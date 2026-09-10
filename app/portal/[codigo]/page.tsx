@@ -14,6 +14,7 @@ import {
   getResenas,
   getBenchmarkMensual,
   getCompetidores,
+  sincronizarCompetidoresDeComercio,
   type TapsPorHoraDia,
   type TopPiezaSemana,
 } from "@/lib/db";
@@ -292,7 +293,6 @@ export default async function PortalPage({
   const {
     rating: ratingHero,
     totalResenas: resenasHero,
-    deltaRating: deltaRatingHero,
     deltaResenas: deltaResenasHero,
   } = heroDeCalificacion(activo);
 
@@ -302,15 +302,23 @@ export default async function PortalPage({
     ? ubicaciones.reduce((acc, u) => acc + heroDeCalificacion(u).totalResenas, 0)
     : resenasHero;
 
-  // Posición frente a la competencia cargada para ESTE local — no tiene
-  // sentido combinarla entre locales (la competencia de un barrio no es la
-  // de otro), así que solo se calcula cuando se está viendo un local
-  // puntual, con Google Places como único requisito (no depende de la
-  // aprobación de Business Profile que todavía está pendiente).
-  const posicionCompetencia = await (async () => {
+  // Competencia cargada para ESTE local — no tiene sentido combinarla entre
+  // locales (la competencia de un barrio no es la de otro), así que solo se
+  // trae cuando se está viendo un local puntual. Se sincroniza acá mismo
+  // (on-demand, cuando el cliente entra a ver su portal) en vez de depender
+  // únicamente del cron diario — sincronizarCompetidoresDeComercio no vuelve
+  // a pegarle a Google si ya se actualizó hace poco, así que entrar varias
+  // veces seguidas no gasta cuota de más.
+  const competidoresLive = modoTodos
+    ? []
+    : await (async () => {
+        await sincronizarCompetidoresDeComercio(activo.id);
+        return getCompetidores(activo.id);
+      })();
+
+  const posicionCompetencia = (() => {
     if (modoTodos || ratingHero === null) return null;
-    const competidores = await getCompetidores(activo.id);
-    const ratingsCompetencia = competidores
+    const ratingsCompetencia = competidoresLive
       .map((comp) => comp.rating)
       .filter((r): r is number => r !== null);
     if (ratingsCompetencia.length === 0) return null;
@@ -445,15 +453,28 @@ export default async function PortalPage({
       resenasGoogle={activo.resenasGoogle}
       ratingHero={ratingHero}
       resenasHero={resenasHero}
-      deltaRatingHero={deltaRatingHero}
       deltaResenasHero={deltaResenasHero}
       resenas={resenas}
+      historico={activo.historico}
+      zona={activo.zona}
     />
   );
 
-  if (benchmark.length > 0) {
+  if (competidoresLive.length > 0 || benchmark.length > 0) {
     panels.competidores = (
-      <PanelCompetidores benchmark={benchmark} crecimientoVsCompetencia={crecimientoVsCompetencia} />
+      <PanelCompetidores
+        competidores={competidoresLive}
+        nombreLocal={activo.nombre}
+        ratingLocal={ratingHero}
+        resenasLocal={resenasHero}
+        posicion={posicionCompetencia}
+        benchmark={benchmark}
+        crecimientoVsCompetencia={crecimientoVsCompetencia}
+        modoTodos={modoTodos}
+        ubicaciones={ubicaciones}
+        activoId={activo.id}
+        codigoAcceso={c.codigoAcceso}
+      />
     );
   }
 
